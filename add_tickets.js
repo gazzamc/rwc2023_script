@@ -125,6 +125,14 @@ function reloadPageWMsg(msg) {
     location.reload()
 }
 
+function redirect() {
+    if (ENABLE_TELEGRAM) {
+        sendToTelegramAndRedirect()
+    } else {
+        redirectToCart();
+    }
+}
+
 if (DEBUG) {
     console.log("Script Loaded!")
 }
@@ -162,11 +170,7 @@ function startLoop() {
                 console.log("Max tickets, redirect to cart!")
             }
 
-            if (ENABLE_TELEGRAM) {
-                sendToTelegramAndRedirect()
-            } else {
-                redirectToCart();
-            }
+            redirect();
 
         } else if (buttonTotal === clickCount && successfulClick > 0) { // Added at least one ticket to basket, all buttons clicked
             clickingDisabled = true
@@ -175,28 +179,21 @@ function startLoop() {
                 console.log("Clicked All buttons, redirecting to cart!")
             }
 
-            if (ENABLE_TELEGRAM) {
-                sendToTelegramAndRedirect()
-            } else {
-                redirectToCart();
-            }
+            redirect();
+            
         } else {
             successfulClick++
         }
 
         //If we meet our threshold then we redirect
-        if (successfulClick == getNoOfTicketsInCart()) {
+        if (NO_TICKETS_WANTED == getNoOfTicketsInCart()) {
             clickingDisabled = true
 
             if (DEBUG) {
                 console.log("No of tickets threshold matched, redirecting to cart!")
             }
 
-            if (ENABLE_TELEGRAM) {
-                sendToTelegramAndRedirect()
-            } else {
-                redirectToCart();
-            }
+            redirect();
         }
     }
 
@@ -244,8 +241,6 @@ function startLoop() {
     }
 
     if (buttonTotal === 0) { // No Tickets, redirect
-        // Stop page loading from server side, this should prevent "SLOWED DOWN" page
-        window.stop();
         setTimeout(() => { reloadPageWMsg(`Reloading in ${DELAY_RELOAD / 1000} seconds!`); }, DELAY_CLICKS)
     } else if (buttonTotal === clickCount && clickCount === failedClick) { // Clicked all buttons and all clicks failed
         reloadPageWMsg("All Failed, Reloading!");
