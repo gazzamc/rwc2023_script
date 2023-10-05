@@ -2,7 +2,7 @@
 const DATE_TIME = new Date().toLocaleString();
 const DELAY_CLICKS = 2000;
 const DELAY_RELOAD = 4000;
-const NO_TICKETS_WANTED = 2; // Need to get ticket total from basket to compare later
+const NO_TICKETS_WANTED = 2;
 const DEBUG = true;
 const ENABLE_TELEGRAM = true;
 
