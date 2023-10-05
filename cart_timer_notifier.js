@@ -1,7 +1,7 @@
 console.log("script loaded")
 
 const cartTimer = document.getElementsByClassName("expiration-timer")
-let timerStarted = false;
+let sentLastMessage = false;
 let timeInterval;
 
 const debounce = (callback, wait) => {
@@ -50,7 +50,8 @@ function checkTime(minutesLeft, secondsLeft) {
         console.log("2 Mins left until Tickets Expire!!")
     }
 
-    if(minutesLeft == 0 && secondsLeft <= 60){
+    if(minutesLeft == 0 && secondsLeft <= 60 && !sentLastMessage){
+        sentLastMessage = true;
         sendToTelegram()
         console.log("Less than a minute left until Tickets Expire!!")
     }
@@ -68,7 +69,7 @@ function getTime(){
     return cartTimer[0].firstElementChild.innerText;
 }
 
-function startLoop(){
+function getTimerStatus(){
     console.log("Looping")
     if(cartTimer.length){
         let time = cartTimer[0].firstElementChild.innerText
@@ -78,7 +79,9 @@ function startLoop(){
         checkTime(minutesLeft, secondsLeft)
 
         if(!timeInterval){
-            timeInterval = setInterval(startLoop, 10000);
+            timeInterval = setInterval(getTimerStatus, 10000);
+
+            // Send first message
             sendToTelegram()
         }
 
@@ -88,4 +91,4 @@ function startLoop(){
     }
 }
 
-startLoop();
+getTimerStatus();

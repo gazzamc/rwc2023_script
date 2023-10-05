@@ -5,6 +5,7 @@ const DELAY_RELOAD = 4000;
 const NO_TICKETS_WANTED = 2;
 const DEBUG = true;
 const ENABLE_TELEGRAM = true;
+const PRIORITISE_MULTI = true; // Will sort pairs tickets and click those first
 
 const debounce = (callback, wait) => {
     let timeoutId = null;
@@ -21,7 +22,7 @@ function getNoOfTicketsInCart() {
     // Get all types of tickets
     const cartItems = document.getElementsByClassName('cart-items');
     // Loop types and get quantity
-    for(let item of cartItems){
+    for (let item of cartItems) {
         ticketsGrabbed += parseInt(item.querySelector(".product-qty .placeholder").innerHTML)
     }
 
@@ -86,12 +87,25 @@ function detectErrorMessage(type) {
     }
 }
 
-function getAllCartButtons() {
+function getAllCartButtons(type) {
+    let element;
     const buttons = [];
 
-    for (let btn of document.getElementsByTagName("button")) {
-        if (btn.id === "edit-add-to-cart") {
-            buttons.push(btn);
+    if (type === "multi") {
+        element = document.getElementsByClassName('multi-tickets');
+
+        for (let multi of document.getElementsByClassName('multi-tickets')) {
+            for (let btn of multi.getElementsByTagName("button")) {
+                if (btn.id === "edit-add-to-cart") {
+                    buttons.push(btn);
+                }
+            }
+        }
+    } else {
+        for (let btn of document.getElementsByTagName("button")) {
+            if (btn.id === "edit-add-to-cart") {
+                buttons.push(btn);
+            }
         }
     }
 
@@ -116,19 +130,25 @@ if (DEBUG) {
 }
 
 function startLoop() {
-    const cartBtns = getAllCartButtons();
-    let availableTickets;
-
-    if (cartBtns.length) {
-        // Check tickets available
-        availableTickets = getAvailableTickets();
-    }
-
+    const cartBtns_default = getAllCartButtons(); //Order of page
     let clickingDisabled = false;
-    let buttonTotal = cartBtns.length;
+    let multiExhausted = false;
+
+    let buttonTotal = cartBtns_default.length;
     let clickCount = 0;
     let failedClick = 0;
     let successfulClick = 0;
+    let cartBtns_multi = 0;
+    let availableTickets;
+
+    if (PRIORITISE_MULTI) {
+        cartBtns_multi = getAllCartButtons("multi");
+    }
+
+    if (cartBtns_default.length) {
+        // Check tickets available
+        availableTickets = getAvailableTickets();
+    }
 
 
     function clickResponse() {
@@ -189,13 +209,27 @@ function startLoop() {
             console.log(`Failed Clicks:  ${failedClick}`)
             console.log(`Successful Clicks:  ${successfulClick}`)
             console.log(`Tickets in cart:  ${getNoOfTicketsInCart()}`)
+            console.log(`Multi-tickets:  ${cartBtns_multi.length}`)
         }
 
-        cartBtns[index].click()
+        if(cartBtns_multi.length && !multiExhausted){
+            // Try clicking until it fails, then reset
+            try{
+                cartBtns_multi[index].click()
+            } catch (err){
+                // no more multies, revert to singles
+                // resettings params
+                index = 0;
+                multiExhausted = true;
+            }
+        } else {
+            cartBtns_default[index].click()
+        }
+
         clickCount++
         clickResponse();
 
-        if (index < cartBtns.length - 1) {
+        if (index < cartBtns_default.length - 1) {
 
             if (!clickingDisabled) {
                 setTimeout(function () {
