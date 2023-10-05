@@ -16,8 +16,24 @@ const debounce = (callback, wait) => {
     };
 }
 
-const sendToTelegram = debounce(() => {
-    if(DEBUG){
+function getNoOfTicketsInCart() {
+    let ticketsGrabbed = 0;
+    // Get all types of tickets
+    const cartItems = document.getElementsByClassName('cart-items');
+    // Loop types and get quantity
+    for(let item of cartItems){
+        ticketsGrabbed += parseInt(item.querySelector(".product-qty .placeholder").innerHTML)
+    }
+
+    return ticketsGrabbed;
+}
+
+function redirectToCart() {
+    location.href = 'https://tickets.rugbyworldcup.com/en/cart'
+}
+
+const sendToTelegramAndRedirect = debounce(() => {
+    if (DEBUG) {
         console.log("Send To Telegram")
     }
 
@@ -30,9 +46,12 @@ const sendToTelegram = debounce(() => {
 
     try {
         oReq.open("GET", url, true);
+        oReq.onreadystatechange = redirectToCart;
         oReq.send();
     } catch (err) {
+        // Failed Redirect
         console.log(err)
+        redirectToCart();
     }
 }, 500);
 
@@ -92,11 +111,7 @@ function reloadPageWMsg(msg) {
     location.reload()
 }
 
-function redirectToCart() {
-    location.href = 'https://tickets.rugbyworldcup.com/en/cart'
-}
-
-if(DEBUG){
+if (DEBUG) {
     console.log("Script Loaded!")
 }
 
@@ -109,6 +124,7 @@ function startLoop() {
         availableTickets = getAvailableTickets();
     }
 
+    let clickingDisabled = false;
     let buttonTotal = cartBtns.length;
     let clickCount = 0;
     let failedClick = 0;
@@ -121,82 +137,87 @@ function startLoop() {
         } else if (detectErrorMessage("Taken")) { // Ticket gone, count it as failed and continue
             failedClick++
         } else if (detectErrorMessage("Max")) { // Max Allowed, redirect
+            clickingDisabled = true
             if (DEBUG) {
                 console.log("Max tickets, redirect to cart!")
             }
 
             if (ENABLE_TELEGRAM) {
-                sendToTelegram()
+                sendToTelegramAndRedirect()
+            } else {
+                redirectToCart();
             }
 
-            redirectToCart();
         } else if (buttonTotal === clickCount && successfulClick > 0) { // Added at least one ticket to basket, all buttons clicked
+            clickingDisabled = true
+
             if (DEBUG) {
                 console.log("Clicked All buttons, redirecting to cart!")
             }
 
             if (ENABLE_TELEGRAM) {
-                sendToTelegram()
+                sendToTelegramAndRedirect()
+            } else {
+                redirectToCart();
             }
-
-            redirectToCart();
         } else {
             successfulClick++
         }
 
         //If we meet our threshold then we redirect
-        if(successfulClick == NO_TICKETS_WANTED){
+        if (successfulClick == getNoOfTicketsInCart()) {
+            clickingDisabled = true
+
             if (DEBUG) {
                 console.log("No of tickets threshold matched, redirecting to cart!")
             }
 
-            // redirectToCart();
+            if (ENABLE_TELEGRAM) {
+                sendToTelegramAndRedirect()
+            } else {
+                redirectToCart();
+            }
         }
     }
 
     function processItem(index) {
+        if (DEBUG) {
+            console.log(`Available Tickets:  ${availableTickets}`)
+            console.log(`Wanted Tickets:  ${NO_TICKETS_WANTED}`)
+            console.log(`Number of Cart Btns:  ${buttonTotal}`)
+            console.log(`Clicks:  ${clickCount}`)
+            console.log(`Failed Clicks:  ${failedClick}`)
+            console.log(`Successful Clicks:  ${successfulClick}`)
+            console.log(`Tickets in cart:  ${getNoOfTicketsInCart()}`)
+        }
+
         cartBtns[index].click()
         clickCount++
-
         clickResponse();
 
         if (index < cartBtns.length - 1) {
-            setTimeout(function () {
-                processItem(index + 1);
-            }, DELAY_CLICKS);
+
+            if (!clickingDisabled) {
+                setTimeout(function () {
+                    processItem(index + 1);
+                }, DELAY_CLICKS);
+            } else {
+                if (DEBUG) {
+                    console.log("Disabled clicking, sending message and/or redirecting!")
+                }
+            }
         }
     }
 
-    if (DEBUG) {
-        console.log(`Available Tickets:  ${availableTickets}`)
-        console.log(`Wanted Tickets:  ${NO_TICKETS_WANTED}`)
-        console.log(`Number of Cart Btns:  ${buttonTotal}`)
-        console.log(`Clicks:  ${clickCount}`)
-        console.log(`Failed Clicks:  ${failedClick}`)
-        console.log(`Successful Clicks:  ${successfulClick}`)
-    }
-
-
     if (buttonTotal === 0) { // No Tickets, redirect
+        // Stop page loading from server side, this should prevent "SLOWED DOWN" page
+        window.stop();
         setTimeout(() => { reloadPageWMsg(`Reloading in ${DELAY_RELOAD / 1000} seconds!`); }, DELAY_CLICKS)
     } else if (buttonTotal === clickCount && clickCount === failedClick) { // Clicked all buttons and all clicks failed
         reloadPageWMsg("All Failed, Reloading!");
-    } else if (
-        (successfulClick == 6 && clickCount != failedClick) || //Hit max tickets and not all failed
-        successfulClick > 0 && index < (cartBtns.length - 1)) { //At least one successful click && No more btns to click
+    }
 
-        if(DEBUG){
-            console.log("Probably tickets, redirect to cart!")
-        }
-
-        if (ENABLE_TELEGRAM) {
-            sendToTelegram()
-        }
-
-        redirectToCart();
-    };
-
-    if ((availableTickets > 0 && buttonTotal > 0) && clickCount == 0) {
+    if (availableTickets > 0 && buttonTotal > 0) {
         processItem(0);
     };
 }

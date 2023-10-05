@@ -77,7 +77,7 @@ function startLoop(){
     
         checkTime(minutesLeft, secondsLeft)
 
-        if(timeInterval){
+        if(!timeInterval){
             timeInterval = setInterval(startLoop, 10000);
             sendToTelegram()
         }
