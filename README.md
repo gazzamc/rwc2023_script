@@ -24,6 +24,7 @@ This has been tested and developed using Google Chrome, so I highly recomment th
 
 - Install Extension - [Scripty](https://chrome.google.com/webstore/detail/scripty-javascript-inject/milkbiaeapddfnpenedfgbfdacpbcbam)
 
+- Be sure to login to your RWC account before running the script
 
 #### Ticket Portal
 
