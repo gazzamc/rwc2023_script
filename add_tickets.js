@@ -8,8 +8,9 @@ const ENABLE_TELEGRAM = true;
 const PRIORITISE_MULTI = true; // Will sort pairs tickets and click those first
 const MAX_PRICE = 300; //Maximum price per ticket (Not total)
 const ENABLE_ANTI_THROTTLE = true; // Adds a delay between refreshes when we hit the throttle page eg (Loading...), helps with the slowdown error.
-const THROTTLE_DELAY = () => (Math.random()>=0.5)? 60000 : 120000; // Randomize the delay between 1 - 2 mins
+const THROTTLE_REFRESH_DELAY = () => (Math.random() >= 0.5) ? 60000 : 120000; // Randomize the delay between 1 - 2 mins
 const THROTTLE_CHECK_DELAY = 1000; // Delay before checking if we have been throttled // Needs to be long enough for page to load or we might miss the tickets
+const THROTTLE_TIMEOUT_TIME = 8000; // When checking user page for throttling we can timeout after a certain time, I think 8 secs is good as the server may be slow.
 
 const debounce = (callback, wait) => {
     let timeoutId = null;
@@ -109,7 +110,7 @@ function getAllCartButtons(type) {
         html = elem.getElementsByClassName('price-info')[0].innerText.trim();
         pricePT = parseInt(/([0-9])\w+/g.exec(html)[0]);
 
-        if(pricePT <= MAX_PRICE){
+        if (pricePT <= MAX_PRICE) {
             for (let btn of elem.getElementsByTagName("button")) {
                 if (btn.id === "edit-add-to-cart") {
                     buttons.push(btn);
@@ -216,14 +217,14 @@ function startLoop() {
             console.log(`Multi-tickets:  ${cartBtns_multi.length}`)
         }
 
-        if(cartBtns_multi.length && !multiExhausted){
+        if (cartBtns_multi.length && !multiExhausted) {
             // Try clicking until it fails, then reset
-            try{
+            try {
                 cartBtns_multi[index].click()
-            } catch (err){
+            } catch (err) {
                 // no more multies, revert to singles
                 // resettings params
-                if(cartBtns_default.length > cartBtns_multi.length){ // No Point re-setting if we only have multi options
+                if (cartBtns_default.length > cartBtns_multi.length) { // No Point re-setting if we only have multi options
                     index = 0;
                 }
                 multiExhausted = true;
@@ -250,7 +251,7 @@ function startLoop() {
     }
 
     if (buttonTotal === 0) { // No Tickets, redirect
-        setTimeout(() => { reloadPageWMsg(`Reloading in ${DELAY_RELOAD / 1000} seconds!`); }, DELAY_CLICKS)
+        setTimeout(() => { reloadPageWMsg(`Reloading in ${DELAY_RELOAD / 1000} seconds!`); }, DELAY_RELOAD)
     } else if (buttonTotal === clickCount && clickCount === failedClick) { // Clicked all buttons and all clicks failed
         reloadPageWMsg("All Failed, Reloading!");
     }
@@ -261,11 +262,46 @@ function startLoop() {
 }
 
 setTimeout(() => {
-    if (document.readyState === "complete" && document.body.innerHTML === '\nLoading...\n\n\n' && ENABLE_ANTI_THROTTLE){
-        console.log("Possibly being throttled, lets wait for a minute or two before refreshing.")
+    if (document.readyState === "complete" && document.body.innerHTML === '\nLoading...\n\n\n' && ENABLE_ANTI_THROTTLE) {
+        // The ticket portal and user area seem to be resolving from the same origin, 
+        // so we can test this to see if we're being throttled as one won't load if the other doesn't
         window.stop();
-        setTimeout(() => reloadPageWMsg(`${(THROTTLE_DELAY() /1000)} seconds later, reloading!`), THROTTLE_DELAY());
-     } else{
+
+        const oReq = new XMLHttpRequest();
+        const didTimeOut = () => {
+            console.log("Possibly being throttled, lets wait for a minute or two before refreshing.")
+
+            setTimeout(
+                () => reloadPageWMsg(`${(THROTTLE_DELAY() / 1000)} seconds later, reloading!`), THROTTLE_REFRESH_DELAY()
+            );
+        }
+
+        const checkResponse = (ev) => {
+            // If it resolved we need to see if the loading text is in the body tag
+            if (ev.target.readyState === XMLHttpRequest.DONE) {
+                if (oReq.responseText.includes("Loading...")) {
+                    didTimeOut();
+                } else {
+                    reloadPageWMsg(`Not Throttled, reloading page!`);
+                }
+            }
+
+        }
+
+        try {
+            const url = "https://tickets.rugbyworldcup.com/en/user";
+            oReq.open("GET", url);
+            oReq.onreadystatechange = checkResponse;
+            oReq.timeout = THROTTLE_TIMEOUT_TIME; // Set timeout to 4 seconds (4000 milliseconds)
+            oReq.ontimeout = didTimeOut
+            oReq.send();
+        } catch (err) {
+            if(DEBUG){
+                console.log(err)
+            }
+            reloadPageWMsg('Failed request!');
+        }
+    } else {
         startLoop();
-     }      
+    }
 }, THROTTLE_CHECK_DELAY);
