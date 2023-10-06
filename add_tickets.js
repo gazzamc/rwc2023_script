@@ -9,6 +9,7 @@ const PRIORITISE_MULTI = true; // Will sort pairs tickets and click those first
 const MAX_PRICE = 300; //Maximum price per ticket (Not total)
 const ENABLE_ANTI_THROTTLE = true; // Adds a delay between refreshes when we hit the throttle page eg (Loading...), helps with the slowdown error.
 const THROTTLE_DELAY = () => (Math.random()>=0.5)? 60000 : 120000; // Randomize the delay between 1 - 2 mins
+const THROTTLE_CHECK_DELAY = 1000; // Delay before checking if we have been throttled // Needs to be long enough for page to load or we might miss the tickets
 
 const debounce = (callback, wait) => {
     let timeoutId = null;
@@ -267,4 +268,4 @@ setTimeout(() => {
      } else{
         startLoop();
      }      
-}, 1000);
+}, THROTTLE_CHECK_DELAY);
