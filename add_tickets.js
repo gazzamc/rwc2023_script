@@ -1,11 +1,14 @@
 // CONSTANTS
 const DATE_TIME = new Date().toLocaleString();
-const DELAY_CLICKS = 2000;
-const DELAY_RELOAD = 4000;
-const NO_TICKETS_WANTED = 2;
+const DELAY_CLICKS = 2000; // Delay between clicking cart buttons
+const DELAY_RELOAD = 15000; // Refresh delay on failure, no tickets
+const NO_TICKETS_WANTED = 2; // No of tickets wanted
 const DEBUG = true;
 const ENABLE_TELEGRAM = true;
 const PRIORITISE_MULTI = true; // Will sort pairs tickets and click those first
+const MAX_PRICE = 300; //Maximum price per ticket (Not total)
+const ENABLE_ANTI_THROTTLE = true; // Adds a delay between refreshes when we hit the throttle page eg (Loading...), helps with the slowdown error.
+const THROTTLE_DELAY = () => (Math.random()>=0.5)? 60000 : 120000; // Randomize the delay between 1 - 2 mins
 
 const debounce = (callback, wait) => {
     let timeoutId = null;
@@ -88,23 +91,28 @@ function detectErrorMessage(type) {
 }
 
 function getAllCartButtons(type) {
-    let element;
+    let elements;
+    let html;
+    let pricePT;
+
     const buttons = [];
 
     if (type === "multi") {
-        element = document.getElementsByClassName('multi-tickets');
+        elements = document.getElementsByClassName('multi-tickets');
+    } else {
+        elements = document.getElementsByClassName('resale-pack-details');
+    }
 
-        for (let multi of document.getElementsByClassName('multi-tickets')) {
-            for (let btn of multi.getElementsByTagName("button")) {
+    for (let elem of elements) {
+        // Get Price per ticket
+        html = elem.getElementsByClassName('price-info')[0].innerText.trim();
+        pricePT = parseInt(/([0-9])\w+/g.exec(html)[0]);
+
+        if(pricePT <= MAX_PRICE){
+            for (let btn of elem.getElementsByTagName("button")) {
                 if (btn.id === "edit-add-to-cart") {
                     buttons.push(btn);
                 }
-            }
-        }
-    } else {
-        for (let btn of document.getElementsByTagName("button")) {
-            if (btn.id === "edit-add-to-cart") {
-                buttons.push(btn);
             }
         }
     }
@@ -158,7 +166,6 @@ function startLoop() {
         availableTickets = getAvailableTickets();
     }
 
-
     function clickResponse() {
         if (detectErrorMessage("Taken") && clickCount === buttonTotal) { //Ticket is gone and we've clicked all the buttons
             reloadPageWMsg(document.getElementById("drupal-modal").innerHTML);
@@ -178,9 +185,8 @@ function startLoop() {
             if (DEBUG) {
                 console.log("Clicked All buttons, redirecting to cart!")
             }
-
             redirect();
-            
+
         } else {
             successfulClick++
         }
@@ -201,7 +207,7 @@ function startLoop() {
         if (DEBUG) {
             console.log(`Available Tickets:  ${availableTickets}`)
             console.log(`Wanted Tickets:  ${NO_TICKETS_WANTED}`)
-            console.log(`Number of Cart Btns:  ${buttonTotal}`)
+            console.log(`Number of Cart Btns (within price threshold):  ${buttonTotal}`)
             console.log(`Clicks:  ${clickCount}`)
             console.log(`Failed Clicks:  ${failedClick}`)
             console.log(`Successful Clicks:  ${successfulClick}`)
@@ -216,7 +222,9 @@ function startLoop() {
             } catch (err){
                 // no more multies, revert to singles
                 // resettings params
-                index = 0;
+                if(cartBtns_default.length > cartBtns_multi.length){ // No Point re-setting if we only have multi options
+                    index = 0;
+                }
                 multiExhausted = true;
             }
         } else {
@@ -251,5 +259,12 @@ function startLoop() {
     };
 }
 
-
-startLoop();
+setTimeout(() => {
+    if (document.readyState === "complete" && document.body.innerHTML === '\nLoading...\n\n\n' && ENABLE_ANTI_THROTTLE){
+        console.log("Possibly being throttled, lets wait for a minute or two before refreshing.")
+        window.stop();
+        setTimeout(() => reloadPageWMsg(`${(oneOrTwo /1000)} seconds later, reloading!`), THROTTLE_DELAY);
+     } else{
+        startLoop();
+     }      
+}, 1000);
