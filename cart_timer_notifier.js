@@ -14,10 +14,28 @@ const debounce = (callback, wait) => {
     };
   }
 
+  function getTicketInfo() {
+    const seats = document.getElementsByClassName('seat-content');
+    let ticketInfo = '';
+    for(let seat of seats) {
+        ticketInfo +=  '\n\n' + seat.innerHTML
+    }
+
+    ticketInfo += '\n\n Cat(s):';
+    for(let cat of document.getElementsByClassName('product-category')) {
+        ticketInfo += '\n ' + cat.innerHTML.trim();
+    }
+
+    ticketInfo += '\n Total Price: ' + document.getElementsByClassName('order-total-to-pay-value')[0].innerHTML;
+
+    return ticketInfo;
+  }
+
   const sendToTelegram = debounce(() => {
     console.log("Send To Telegram")
-    const message = `<a href="https://tickets.rugbyworldcup.com/en/cart">Tickets still in cart - ${getTime()} left to go!!</a>`;
-
+    const ticketInfo = getTicketInfo();
+    
+    const message = encodeURI(`<a href="https://tickets.rugbyworldcup.com/en/cart">Tickets still in cart - ${getTime()} left to go!!</a>\nTicket(s) Info: ${ticketInfo}`);
     const token = "<telegram-bot-token>";
     // Get chat_id from https://api.telegram.org/bot<api-key>/getUpdates
     const chat_id = "<telegram-chat-id>";
