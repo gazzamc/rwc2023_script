@@ -2,9 +2,7 @@
 
 This is a small Javascript script that will grab tickets from the ticket portal and add them to the basket, then redirect when certain conditions are met.
 
-:exclamation: 
-
-<b>Disclaimer</b>
+:exclamation: <b>Disclaimer</b>
 ```
     This "bot" was written for educational purposes. It won't guarantee anything but may improve your chances of
     obtaining a ticket. Any misuse of the tool, and consequences of such actions are your own responsibility.
