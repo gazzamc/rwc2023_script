@@ -263,7 +263,7 @@ setTimeout(() => {
     if (document.readyState === "complete" && document.body.innerHTML === '\nLoading...\n\n\n' && ENABLE_ANTI_THROTTLE){
         console.log("Possibly being throttled, lets wait for a minute or two before refreshing.")
         window.stop();
-        setTimeout(() => reloadPageWMsg(`${(oneOrTwo /1000)} seconds later, reloading!`), THROTTLE_DELAY);
+        setTimeout(() => reloadPageWMsg(`${(THROTTLE_DELAY /1000)} seconds later, reloading!`), THROTTLE_DELAY);
      } else{
         startLoop();
      }      
