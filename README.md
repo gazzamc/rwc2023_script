@@ -4,10 +4,10 @@ This is a small Javascript script that will grab tickets from the ticket portal 
 
 :exclamation: <b>Disclaimer</b>
 ```
-    This "bot" was written for educational purposes. It won't guarantee anything but may improve your chances of
-    obtaining a ticket. Any misuse of the tool, and consequences of such actions are your own responsibility.
+This "bot" was written for educational purposes. It won't guarantee anything but may improve your chances of
+obtaining a ticket. Any misuse of the tool, and consequences of such actions are your own responsibility.
 
-    Use at your own risk!
+Use at your own risk!
 ```
 
 ### Features
