@@ -18,11 +18,10 @@ const CHECK_CLICK_RESPONSE_TIMEOUT = 10; //Adds a delay when checking if click w
 
 //Misc
 const PERF = true; // Displays execution time between clicks
-const DEBUG = false; // Adds debug messages, caution will increase bot execution time
+const DEBUG = true; // Adds debug messages, caution will increase bot execution time
 
 // Telegram settings
 const ENABLE_TELEGRAM = true;
-// Get the bot token by following the guide https://core.telegram.org/bots/tutorial#obtain-your-bot-token
 const TELEGRAM_TOKEN = "enter-your-token-here";
 // Get chat_id from https://api.telegram.org/bot<api-key>/getUpdates
 const TELEGRAM_CHAT_ID = 123456; // Enter your chat id here, get it from the above url
@@ -129,8 +128,9 @@ function detectErrorMessage(type) {
 
 function getAllCartButtons(type) {
     let elements;
-    let html;
+    let priceInfo;
     let pricePT;
+    let ticketCount;
 
     const buttons = [];
 
@@ -142,10 +142,13 @@ function getAllCartButtons(type) {
 
     for (let elem of elements) {
         // Get Price per ticket
-        html = elem.getElementsByClassName('price-info')[0].innerText.trim();
-        pricePT = parseInt(/([0-9])\w+/g.exec(html)[0]);
+        priceInfo = elem.getElementsByClassName('price-info')[0].innerText.trim();
+        pricePT = parseInt(/([0-9])\w+/g.exec(priceInfo)[0]);
 
-        if (pricePT <= MAX_PRICE) {
+        // Get number of tickets (multi)
+        ticketCount = elem.getElementsByClassName('resale-listing-row').length;
+
+        if (pricePT <= MAX_PRICE && ticketCount <= NO_TICKETS_WANTED) {
             for (let btn of elem.getElementsByTagName("button")) {
                 if (btn.id === "edit-add-to-cart") {
                     buttons.push(btn);
@@ -165,15 +168,15 @@ function getAvailableTickets() {
     return 0;
 }
 
-function reloadPageWMsg(msg) {
-    console.log(`${msg}`, DATE_TIME)
+function reloadPageWMsg(msg, noDate=false) {
+    console.log(`${msg}`, noDate ? null : DATE_TIME)
     location.reload()
 }
 
-function redirect() {
+function redirect(redirecting) {
     const ticketsInCart = getNoOfTicketsInCart();
-    // Doable check we have tickets
-    if (ticketsInCart > 1) {
+    // Double check we have tickets
+    if (ticketsInCart > 0 && !redirecting) {
         if (DEBUG) {
             console.log("Tickets confirmed in cart!")
         }
@@ -185,11 +188,12 @@ function redirect() {
                 redirectToCart()
             }
         }
-    } else {
+    } else if (!redirecting) { //Just it case it didn't detect the ticket, don't refresh
         if (DEBUG) {
-            console.log("No tickets in cart!")
+            console.log("No tickets in cart, refreshing!")
         }
 
+        reloadPageWMsg('')
     }
 }
 
@@ -225,7 +229,21 @@ function startLoop() {
             console.log("buttonTotal", buttonTotal)
         }
 
-        if (detectErrorMessage("Taken") && (clickCount === buttonTotal)) { //Ticket is gone and we've clicked all the buttons
+        //If we meet our threshold then we redirect
+        if (NO_TICKETS_WANTED == getNoOfTicketsInCart() && !redirecting) {
+            clickingDisabled = true
+            redirecting = true
+
+            if (DEBUG) {
+                console.log("No of tickets threshold matched, redirecting to cart!")
+            }
+
+            if (REDIRECT_TO_CART) {
+                redirect(redirecting);
+            }
+        }
+
+        if (detectErrorMessage("Taken") && clickCount === buttonTotal) { //Ticket is gone and we've clicked all the buttons
             if (DEBUG) {
                 console.log('All Taken, buttons exhausted')
             }
@@ -253,14 +271,12 @@ function startLoop() {
             }
 
             if (REDIRECT_TO_CART) {
-                redirect();
+                redirect(redirecting);
             }
         }
 
-        if (!redirecting &&
-            buttonTotal === clickCount &&
-            successfulClick > 0) { // Added at least one ticket to basket, all buttons clicked
-                
+        if (!redirecting && buttonTotal === clickCount && getNoOfTicketsInCart() > 0) { // Added at least one ticket to basket, all buttons clicked
+
             clickingDisabled = true
             redirecting = true
 
@@ -269,28 +285,14 @@ function startLoop() {
             }
 
             if (REDIRECT_TO_CART) {
-                redirect();
+                redirect(redirecting);
             }
 
         };
-
-        //If we meet our threshold then we redirect
-        if (NO_TICKETS_WANTED == getNoOfTicketsInCart() && !redirecting) {
-            clickingDisabled = true
-            redirecting = true
-
-            if (DEBUG) {
-                console.log("No of tickets threshold matched, redirecting to cart!")
-            }
-
-            if (REDIRECT_TO_CART) {
-                redirect();
-            }
-        }
     }
 
     function processItem(index) {
-        if (cartBtns_multi.length && !multiExhausted) {
+        if (cartBtns_multi.length && !multiExhausted && NO_TICKETS_WANTED > 1 && !redirecting) {
             // Try clicking until it fails, then reset
             try {
                 cartBtns_multi[index].click();
@@ -304,7 +306,7 @@ function startLoop() {
                 }
                 multiExhausted = true;
             }
-        } else {
+        } else if (!redirecting) {
             cartBtns_default[index].click()
             clickCount++
 
@@ -327,7 +329,7 @@ function startLoop() {
             console.log(`Tickets in cart:  ${getNoOfTicketsInCart()}`)
             console.log(`Multi-tickets:  ${cartBtns_multi.length}`)
         }
-        if (index < cartBtns_default.length - 1) {
+        if (index < (cartBtns_default.length - 1) && !redirecting) {
             if (PERF) {
                 start = Date.now();
             }
@@ -385,7 +387,7 @@ setTimeout(() => {
         setTimeout(() => { console.log(`Stop window`); window.stop() }, THROTTLE_TIMEOUT_TIME);
         let waitTime = THROTTLE_REFRESH_DELAY();
 
-        if (document.getElementsByClassName('unavailable-page-visual')) {
+        if (document.getElementsByClassName('unavailable-page-visual').length) {
             if (DEBUG) {
                 console.log(`%c Not being throttled, continuing!`, 'color: #00ff00')
             }
@@ -394,7 +396,7 @@ setTimeout(() => {
             if (DEBUG) {
                 console.log(`Possibly being throttled, lets wait for ${(waitTime / 1000)} seconds before refreshing.`)
             }
-            setTimeout(() => reloadPageWMsg(`${(waitTime / 1000)} seconds later, reloading!`), waitTime);
+            setTimeout(() => reloadPageWMsg(`${(waitTime / 1000)} seconds later, reloading!`, false), waitTime);
         }
 
         if (PERF) {
