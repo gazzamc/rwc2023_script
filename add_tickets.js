@@ -1,16 +1,35 @@
 // CONSTANTS
 const DATE_TIME = new Date().toLocaleString();
-const DELAY_CLICKS = 2000; // Delay between clicking cart buttons
-const DELAY_RELOAD = 15000; // Refresh delay on failure, no tickets
-const NO_TICKETS_WANTED = 2; // No of tickets wanted
-const DEBUG = true;
-const ENABLE_TELEGRAM = true;
-const PRIORITISE_MULTI = true; // Will sort pairs tickets and click those first
-const MAX_PRICE = 300; //Maximum price per ticket (Not total)
+
+//Preferences
+const NO_TICKETS_WANTED = 2; // No of tickets wanted, will still add single tickets if available, this wont circumvent the hard limit (6) on the site.
+const MAX_PRICE = 350; //Maximum price per ticket (Not total), caution! any tickets lower than this price will not be added to basket, for best results don't make it too low
+const PRIORITISE_MULTI = true; // Will sort by multi tickets and click those first
+const DISABLE_REDIRECT_TO_CART = false; // If you prefer the bot doesn't redirect after adding tickets to basket.
+
+//Some settings to try and reduce throttling
 const ENABLE_ANTI_THROTTLE = true; // Adds a delay between refreshes when we hit the throttle page eg (Loading...), helps with the slowdown error.
-const THROTTLE_REFRESH_DELAY = () => (Math.random() >= 0.5) ? 60000 : 120000; // Randomize the delay between 1 - 2 mins
-const THROTTLE_CHECK_DELAY = 1000; // Delay before checking if we have been throttled // Needs to be long enough for page to load or we might miss the tickets
-const THROTTLE_TIMEOUT_TIME = 8000; // When checking user page for throttling we can timeout after a certain time, I think 8 secs is good as the server may be slow.
+const DELAY_CLICKS = 2000; // Delay between clicking cart buttons
+const DELAY_RELOAD = 20000; // Refresh delay on failure, no tickets
+const THROTTLE_REFRESH_DELAY = () => (Math.random() >= 0.5) ? 240000 : 120000; // Randomize the delay between 2 - 4 mins
+const THROTTLE_CHECK_DELAY = 0; // Delay before checking if we have been throttled // Needs to be long enough for page to load or we might miss the tickets // Adds delay to execution
+const THROTTLE_TIMEOUT_TIME = 10000; // When checking for throttling we can timeout after a certain time, I think 10 secs is good as the server may be slow.
+const CHECK_CLICK_RESPONSE_TIMEOUT = 10; //Adds a delay when checking if click was successful, can add a delay to each click but will reduce false positives (someone grabs ticket first)
+
+//Misc
+const PERF = true; // Displays execution time between clicks
+const DEBUG = false; // Adds debug messages, caution will increase bot execution time
+
+// Telegram settings
+const ENABLE_TELEGRAM = true;
+// Get the bot token by following the guide https://core.telegram.org/bots/tutorial#obtain-your-bot-token
+const TELEGRAM_TOKEN = "enter-your-token-here";
+// Get chat_id from https://api.telegram.org/bot<api-key>/getUpdates
+const TELEGRAM_CHAT_ID = 123456; // Enter your chat id here, get it from the above url
+
+// Don't modify below this line
+let start;
+let end;
 
 const debounce = (callback, wait) => {
     let timeoutId = null;
@@ -35,6 +54,10 @@ function getNoOfTicketsInCart() {
 }
 
 function redirectToCart() {
+    if (DEBUG) {
+        console.log("Redirect To Cart")
+    }
+
     location.href = 'https://tickets.rugbyworldcup.com/en/cart'
 }
 
@@ -44,15 +67,14 @@ const sendToTelegramAndRedirect = debounce(() => {
     }
 
     const message = `<a href="https://tickets.rugbyworldcup.com/en/cart">Tickets Added to Cart - ${location.pathname.split("/").pop()}</a>`;
-    const token = "<telegram-bot-token>";
-    // Get chat_id from https://api.telegram.org/bot<api-key>/getUpdates
-    const chat_id = "<telegram-chat-id>";
+    const token = TELEGRAM_TOKEN;
+    const chat_id = TELEGRAM_CHAT_ID;
     const url = `https://api.telegram.org/bot${token}/sendMessage?chat_id=${chat_id}&text=${message}&parse_mode=html`;
     const oReq = new XMLHttpRequest();
 
     try {
         oReq.open("GET", url, true);
-        oReq.onreadystatechange = redirectToCart;
+        oReq.onreadystatechange = () => { if (!DISABLE_REDIRECT_TO_CART) { redirectToCart() } };
         oReq.send();
     } catch (err) {
         // Failed Redirect
@@ -61,35 +83,43 @@ const sendToTelegramAndRedirect = debounce(() => {
     }
 }, 500);
 
-function addScriptTags(func) {
-    const script = document.createElement('script');
-    script.setAttribute("type", "text/javascript")
-    script.innerHTML = func
-    document.head.appendChild(script);
-}
-
 function detectErrorMessage(type) {
     const errorModal = document.getElementById("ui-id-1");
+    let knownError = false;
+
     if (errorModal) {
         const message = document.getElementById("drupal-modal")
 
         switch (type) {
             case "Max":
                 if (message.innerText.includes("You can't take more")) {
-                    return true;
+                    console.log("max")
+                    knownError = true;
                 }
                 break;
             case "Taken":
-                if (message.innerText.includes("This listing is being bought")) {
-                    return true;
+                if (
+                    message.innerText.includes("This listing is being bought") ||
+                    message.innerText.includes("This listing is not in sell anymore."
+                    )) {
+                    console.log("unavailable")
+
+                    knownError = true;
                 }
                 break;
             default:
         }
 
-    } else {
-        return false;
+        // Close window to prevent false positive
+        try {
+            const errorMsgBTn = errorModal.parentElement.getElementsByTagName("Button")[0]
+            errorMsgBTn.click();
+        } catch {
+            //
+        }
     }
+
+    return knownError;
 }
 
 function getAllCartButtons(type) {
@@ -159,7 +189,7 @@ function startLoop() {
     let cartBtns_multi = 0;
     let availableTickets;
 
-    if (PRIORITISE_MULTI) {
+    if (PRIORITISE_MULTI && cartBtns_default.length > 1) {
         cartBtns_multi = getAllCartButtons("multi");
     }
 
@@ -169,29 +199,57 @@ function startLoop() {
     }
 
     function clickResponse() {
-        if (detectErrorMessage("Taken") && clickCount === buttonTotal) { //Ticket is gone and we've clicked all the buttons
-            reloadPageWMsg(document.getElementById("drupal-modal").innerHTML);
-        } else if (detectErrorMessage("Taken")) { // Ticket gone, count it as failed and continue
+        if (DEBUG) {
+            console.log("clickCount", clickCount)
+            console.log("buttonTotal", buttonTotal)
+            console.log("taken", detectErrorMessage("Taken"))
+            console.log("Max", detectErrorMessage("Max"))
+        }
+
+        if (detectErrorMessage("Taken") && (clickCount === buttonTotal)) { //Ticket is gone and we've clicked all the buttons
+            // debugger;
+
+            if (DEBUG) {
+                console.log('All Taken, buttons exhausted')
+            }
+
+            return reloadPageWMsg("All Taken, buttons exhausted");
+        }
+
+        if (detectErrorMessage("Taken")) { // Ticket gone, count it as failed and continue
+            if (DEBUG) {
+                console.log('failed')
+            }
+
             failedClick++
-        } else if (detectErrorMessage("Max")) { // Max Allowed, redirect
+        } else {
+            successfulClick++
+        }
+
+        if (detectErrorMessage("Max")) { // Max Allowed, redirect
             clickingDisabled = true
             if (DEBUG) {
                 console.log("Max tickets, redirect to cart!")
             }
 
-            redirect();
+            if (!DISABLE_REDIRECT_TO_CART) {
+                redirect();
+            }
+        }
 
-        } else if (buttonTotal === clickCount && successfulClick > 0) { // Added at least one ticket to basket, all buttons clicked
+        if (buttonTotal === clickCount && successfulClick > 0) { // Added at least one ticket to basket, all buttons clicked
+            // debugger
             clickingDisabled = true
 
             if (DEBUG) {
                 console.log("Clicked All buttons, redirecting to cart!")
             }
-            redirect();
 
-        } else {
-            successfulClick++
-        }
+            if (!DISABLE_REDIRECT_TO_CART) {
+                redirect();
+            }
+
+        };
 
         //If we meet our threshold then we redirect
         if (NO_TICKETS_WANTED == getNoOfTicketsInCart()) {
@@ -201,11 +259,47 @@ function startLoop() {
                 console.log("No of tickets threshold matched, redirecting to cart!")
             }
 
-            redirect();
+            if (!DISABLE_REDIRECT_TO_CART) {
+                redirect();
+            }
         }
     }
 
     function processItem(index) {
+        if (cartBtns_multi.length && !multiExhausted) {
+            // Try clicking until it fails, then reset
+            try {
+                if (DEBUG) {
+                    console.log("Clicking multi button!")
+                }
+
+                cartBtns_multi[index].click();
+                clickCount++
+                setTimeout(() => clickResponse(), CHECK_CLICK_RESPONSE_TIMEOUT);
+            } catch (err) {
+                if (DEBUG) {
+                    console.log("Clicking single button!")
+                }
+                // no more multies, revert to singles
+                // resettings params
+                if (cartBtns_default.length > cartBtns_multi.length) { // No Point re-setting if we only have multi options
+                    index = 0;
+                }
+                multiExhausted = true;
+            }
+        } else {
+            cartBtns_default[index].click()
+            clickCount++
+
+            // wait a slight bit in order for error to appear
+            setTimeout(() => clickResponse(), CHECK_CLICK_RESPONSE_TIMEOUT);
+        }
+
+        if (PERF) {
+            end = Date.now();
+            console.log(`Execution time per click: ${end - start} ms`);
+        }
+
         if (DEBUG) {
             console.log(`Available Tickets:  ${availableTickets}`)
             console.log(`Wanted Tickets:  ${NO_TICKETS_WANTED}`)
@@ -216,27 +310,10 @@ function startLoop() {
             console.log(`Tickets in cart:  ${getNoOfTicketsInCart()}`)
             console.log(`Multi-tickets:  ${cartBtns_multi.length}`)
         }
-
-        if (cartBtns_multi.length && !multiExhausted) {
-            // Try clicking until it fails, then reset
-            try {
-                cartBtns_multi[index].click()
-            } catch (err) {
-                // no more multies, revert to singles
-                // resettings params
-                if (cartBtns_default.length > cartBtns_multi.length) { // No Point re-setting if we only have multi options
-                    index = 0;
-                }
-                multiExhausted = true;
-            }
-        } else {
-            cartBtns_default[index].click()
-        }
-
-        clickCount++
-        clickResponse();
-
         if (index < cartBtns_default.length - 1) {
+            if (PERF) {
+                start = Date.now();
+            }
 
             if (!clickingDisabled) {
                 setTimeout(function () {
@@ -247,61 +324,72 @@ function startLoop() {
                     console.log("Disabled clicking, sending message and/or redirecting!")
                 }
             }
+        } else {
+            if (DEBUG) {
+                console.log("Finished, No more buttons to click!")
+            }
         }
     }
 
     if (buttonTotal === 0) { // No Tickets, redirect
+        if (DEBUG) {
+            console.log(`%c No Tickets within price range or none available, if the former, adjust max price setting`, 'color: #ff0000')
+        }
+
         setTimeout(() => { reloadPageWMsg(`Reloading in ${DELAY_RELOAD / 1000} seconds!`); }, DELAY_RELOAD)
-    } else if (buttonTotal === clickCount && clickCount === failedClick) { // Clicked all buttons and all clicks failed
+    } else if (
+        buttonTotal === clickCount && (clickCount === failedClick ||
+            clickCount === successfulClick)) { // Clicked all buttons and all clicks failed
         reloadPageWMsg("All Failed, Reloading!");
     }
 
     if (availableTickets > 0 && buttonTotal > 0) {
+        if (DEBUG) {
+            console.log('Process buttons')
+        }
+
         processItem(0);
     };
 }
 
+if (PERF) {
+    start = Date.now();
+}
+
+
 setTimeout(() => {
     if (document.readyState === "complete" && document.body.innerHTML === '\nLoading...\n\n\n' && ENABLE_ANTI_THROTTLE) {
-        // The ticket portal and user area seem to be resolving from the same origin, 
-        // so we can test this to see if we're being throttled as one won't load if the other doesn't
-        window.stop();
-
-        const oReq = new XMLHttpRequest();
-        const didTimeOut = () => {
-            console.log("Possibly being throttled, lets wait for a minute or two before refreshing.")
-
-            setTimeout(
-                () => reloadPageWMsg(`${(THROTTLE_DELAY() / 1000)} seconds later, reloading!`), THROTTLE_REFRESH_DELAY()
-            );
+        if (DEBUG) {
+            console.log(`%c Checking Throttle`, 'color: #00ff00')
         }
 
-        const checkResponse = (ev) => {
-            // If it resolved we need to see if the loading text is in the body tag
-            if (ev.target.readyState === XMLHttpRequest.DONE) {
-                if (oReq.responseText.includes("Loading...")) {
-                    didTimeOut();
-                } else {
-                    reloadPageWMsg(`Not Throttled, reloading page!`);
-                }
+
+        // Don't stop loading immediately to give time for page to resolve
+        setTimeout(() => { console.log(`Stop window`); window.stop() }, THROTTLE_TIMEOUT_TIME);
+        let waitTime = THROTTLE_REFRESH_DELAY();
+
+        if (document.getElementsByClassName('unavailable-page-visual')) {
+            if (DEBUG) {
+                console.log(`%c Not being throttled, continuing!`, 'color: #00ff00')
             }
 
+        } else {
+            if (DEBUG) {
+                console.log(`Possibly being throttled, lets wait for ${(waitTime / 1000)} seconds before refreshing.`)
+            }
+            setTimeout(() => reloadPageWMsg(`${(waitTime / 1000)} seconds later, reloading!`), waitTime);
         }
 
-        try {
-            const url = "https://tickets.rugbyworldcup.com/en/user";
-            oReq.open("GET", url);
-            oReq.onreadystatechange = checkResponse;
-            oReq.timeout = THROTTLE_TIMEOUT_TIME; // Set timeout to 4 seconds (4000 milliseconds)
-            oReq.ontimeout = didTimeOut
-            oReq.send();
-        } catch (err) {
-            if(DEBUG){
-                console.log(err)
-            }
-            reloadPageWMsg('Failed request!');
+        if (PERF) {
+            end = Date.now();
+            console.log(`Execution time - Throttle Check: ${end - start} ms`);
         }
+
     } else {
+        if (DEBUG) {
+            console.log(`%c Scanning page`, 'color: #00ff00')
+        }
+
         startLoop();
     }
 }, THROTTLE_CHECK_DELAY);
