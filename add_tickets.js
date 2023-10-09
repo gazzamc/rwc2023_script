@@ -5,7 +5,7 @@ const DATE_TIME = new Date().toLocaleString();
 const NO_TICKETS_WANTED = 2; // No of tickets wanted, will still add single tickets if available, this wont circumvent the hard limit (6) on the site.
 const MAX_PRICE = 350; //Maximum price per ticket (Not total), caution! any tickets lower than this price will not be added to basket, for best results don't make it too low
 const PRIORITISE_MULTI = true; // Will sort by multi tickets and click those first
-const DISABLE_REDIRECT_TO_CART = false; // If you prefer the bot doesn't redirect after adding tickets to basket.
+const REDIRECT_TO_CART = true; // If you prefer the bot doesn't redirect after adding tickets to basket.
 
 //Some settings to try and reduce throttling
 const ENABLE_ANTI_THROTTLE = true; // Adds a delay between refreshes when we hit the throttle page eg (Loading...), helps with the slowdown error.
@@ -53,13 +53,13 @@ function getNoOfTicketsInCart() {
     return ticketsGrabbed;
 }
 
-function redirectToCart() {
+const redirectToCart = debounce(() => {
     if (DEBUG) {
         console.log("Redirect To Cart")
     }
 
     location.href = 'https://tickets.rugbyworldcup.com/en/cart'
-}
+}, 200)
 
 const sendToTelegramAndRedirect = debounce(() => {
     if (DEBUG) {
@@ -74,27 +74,42 @@ const sendToTelegramAndRedirect = debounce(() => {
 
     try {
         oReq.open("GET", url, true);
-        oReq.onreadystatechange = () => { if (!DISABLE_REDIRECT_TO_CART) { redirectToCart() } };
+        oReq.onreadystatechange = () => { if (REDIRECT_TO_CART) { redirectToCart() } };
         oReq.send();
     } catch (err) {
         // Failed Redirect
-        console.log(err)
-        redirectToCart();
+        if (DEBUG) {
+            console.log(err)
+        }
+
+        if (REDIRECT_TO_CART) {
+            redirectToCart()
+        }
     }
 }, 500);
 
-function detectErrorMessage(type) {
-    const errorModal = document.getElementById("ui-id-1");
-    let knownError = false;
+function closeModal() {
+    const errorModal = document.getElementsByClassName("ui-dialog")[0];
 
+    // Close window to prevent false positive
+    try {
+        const errorMsgBTn = errorModal.getElementsByTagName("Button")[0]
+        errorMsgBTn.click();
+    } catch {
+        //
+    }
+
+}
+
+function detectErrorMessage(type) {
+    const errorModal = document.getElementsByClassName("ui-dialog")[0];
     if (errorModal) {
         const message = document.getElementById("drupal-modal")
 
         switch (type) {
             case "Max":
                 if (message.innerText.includes("You can't take more")) {
-                    console.log("max")
-                    knownError = true;
+                    return true;
                 }
                 break;
             case "Taken":
@@ -102,24 +117,14 @@ function detectErrorMessage(type) {
                     message.innerText.includes("This listing is being bought") ||
                     message.innerText.includes("This listing is not in sell anymore."
                     )) {
-                    console.log("unavailable")
 
-                    knownError = true;
+                    return true;
                 }
                 break;
             default:
-        }
-
-        // Close window to prevent false positive
-        try {
-            const errorMsgBTn = errorModal.parentElement.getElementsByTagName("Button")[0]
-            errorMsgBTn.click();
-        } catch {
-            //
+                return false;
         }
     }
-
-    return knownError;
 }
 
 function getAllCartButtons(type) {
@@ -166,10 +171,25 @@ function reloadPageWMsg(msg) {
 }
 
 function redirect() {
-    if (ENABLE_TELEGRAM) {
-        sendToTelegramAndRedirect()
+    const ticketsInCart = getNoOfTicketsInCart();
+    // Doable check we have tickets
+    if (ticketsInCart > 1) {
+        if (DEBUG) {
+            console.log("Tickets confirmed in cart!")
+        }
+
+        if (ENABLE_TELEGRAM) {
+            sendToTelegramAndRedirect()
+        } else {
+            if (REDIRECT_TO_CART) {
+                redirectToCart()
+            }
+        }
     } else {
-        redirectToCart();
+        if (DEBUG) {
+            console.log("No tickets in cart!")
+        }
+
     }
 }
 
@@ -181,6 +201,7 @@ function startLoop() {
     const cartBtns_default = getAllCartButtons(); //Order of page
     let clickingDisabled = false;
     let multiExhausted = false;
+    let redirecting = false;
 
     let buttonTotal = cartBtns_default.length;
     let clickCount = 0;
@@ -202,13 +223,9 @@ function startLoop() {
         if (DEBUG) {
             console.log("clickCount", clickCount)
             console.log("buttonTotal", buttonTotal)
-            console.log("taken", detectErrorMessage("Taken"))
-            console.log("Max", detectErrorMessage("Max"))
         }
 
         if (detectErrorMessage("Taken") && (clickCount === buttonTotal)) { //Ticket is gone and we've clicked all the buttons
-            // debugger;
-
             if (DEBUG) {
                 console.log('All Taken, buttons exhausted')
             }
@@ -218,48 +235,55 @@ function startLoop() {
 
         if (detectErrorMessage("Taken")) { // Ticket gone, count it as failed and continue
             if (DEBUG) {
-                console.log('failed')
+                console.log('Grabbing ticket failed')
             }
 
             failedClick++
+            closeModal();
         } else {
             successfulClick++
         }
 
-        if (detectErrorMessage("Max")) { // Max Allowed, redirect
+        if (detectErrorMessage("Max") && !redirecting) { // Max Allowed, redirect
             clickingDisabled = true
+            redirecting = true
+
             if (DEBUG) {
-                console.log("Max tickets, redirect to cart!")
+                console.log("Max tickets, redirect to cart and/or send to telegram!")
             }
 
-            if (!DISABLE_REDIRECT_TO_CART) {
+            if (REDIRECT_TO_CART) {
                 redirect();
             }
         }
 
-        if (buttonTotal === clickCount && successfulClick > 0) { // Added at least one ticket to basket, all buttons clicked
-            // debugger
+        if (!redirecting &&
+            buttonTotal === clickCount &&
+            successfulClick > 0) { // Added at least one ticket to basket, all buttons clicked
+                
             clickingDisabled = true
+            redirecting = true
 
             if (DEBUG) {
                 console.log("Clicked All buttons, redirecting to cart!")
             }
 
-            if (!DISABLE_REDIRECT_TO_CART) {
+            if (REDIRECT_TO_CART) {
                 redirect();
             }
 
         };
 
         //If we meet our threshold then we redirect
-        if (NO_TICKETS_WANTED == getNoOfTicketsInCart()) {
+        if (NO_TICKETS_WANTED == getNoOfTicketsInCart() && !redirecting) {
             clickingDisabled = true
+            redirecting = true
 
             if (DEBUG) {
                 console.log("No of tickets threshold matched, redirecting to cart!")
             }
 
-            if (!DISABLE_REDIRECT_TO_CART) {
+            if (REDIRECT_TO_CART) {
                 redirect();
             }
         }
@@ -269,17 +293,10 @@ function startLoop() {
         if (cartBtns_multi.length && !multiExhausted) {
             // Try clicking until it fails, then reset
             try {
-                if (DEBUG) {
-                    console.log("Clicking multi button!")
-                }
-
                 cartBtns_multi[index].click();
                 clickCount++
                 setTimeout(() => clickResponse(), CHECK_CLICK_RESPONSE_TIMEOUT);
             } catch (err) {
-                if (DEBUG) {
-                    console.log("Clicking single button!")
-                }
                 // no more multies, revert to singles
                 // resettings params
                 if (cartBtns_default.length > cartBtns_multi.length) { // No Point re-setting if we only have multi options
