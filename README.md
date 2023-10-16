@@ -19,7 +19,7 @@ Use at your own risk!
 
 ### Setup
 
-This has been tested and developed using Google Chrome, so I highly recomment that browser for the best results.
+This has been tested and developed using Google Chrome, so I highly recommend that browser for the best results.
 
 
 - Install Extension - [Scripty](https://chrome.google.com/webstore/detail/scripty-javascript-inject/milkbiaeapddfnpenedfgbfdacpbcbam)
@@ -74,13 +74,13 @@ eg.
 
 #### Telegram Bot
 
-Replace the `token` and `chat_id` with your own:
+Replace the `TELEGRAM_TOKEN` and `TELEGRAM_CHAT_ID` with your own:
 
 ```JS
-    const token = "<telegram-bot-token>";
-    // Get chat_id from https://api.telegram.org/bot<api-key>/getUpdates
-    const chat_id = "<telegram-chat-id>";
-    const url = `https://api.telegram.org/b
+   const ENABLE_TELEGRAM = true;
+   const TELEGRAM_TOKEN = "replace-this-with-token";
+   // Get chat_id from https://api.telegram.org/bot<api-key>/getUpdates
+   const TELEGRAM_CHAT_ID = 123456;
 ```
 
 Get the bot token by following the guide [HERE](https://core.telegram.org/bots/tutorial#obtain-your-bot-token)
