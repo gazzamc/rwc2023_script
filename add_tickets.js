@@ -3,7 +3,7 @@ const DATE_TIME = new Date().toLocaleString();
 
 //Preferences
 const NO_TICKETS_WANTED = 2; // No of tickets wanted, will still add single tickets if available, this wont circumvent the hard limit (6) on the site.
-const MAX_PRICE = 600; //Maximum price per ticket (Not total), caution! any tickets lower than this price will not be added to basket, for best results don't make it too low
+const MAX_PRICE = 600; // Maximum price per ticket (Not total), caution! any tickets higher than this price will not be added to basket, for best results don't make it too low
 const PRIORITISE_MULTI = true; // Will sort by multi tickets and click those first
 const REDIRECT_TO_CART = true; // If you prefer the bot doesn't redirect after adding tickets to basket.
 
@@ -14,7 +14,7 @@ const DELAY_RELOAD = (Math.floor(Math.random() * 101) * 2000); // Refresh delay 
 const THROTTLE_REFRESH_DELAY = (Math.floor(Math.random() * 101) * 2000); // Randomize the delay between 2 - 4 mins
 const THROTTLE_CHECK_DELAY = 100; // Delay before checking if we have been throttled // Needs to be long enough for page to load or we might miss the tickets // Adds delay to execution
 const THROTTLE_TIMEOUT_TIME = 10000; // When checking for throttling we can timeout after a certain time, I think 10 secs is good as the server may be slow.
-const CHECK_CLICK_RESPONSE_TIMEOUT = 300; //Adds a delay when checking if click was successful, can add a delay to each click but will reduce false positives (someone grabs ticket first)
+const CHECK_CLICK_RESPONSE_TIMEOUT = 300; // Adds a delay when checking if click was successful, can add a delay to each click but will reduce false positives (someone grabs ticket first)
 
 //Misc
 const PERF = true; // Displays execution time between clicks

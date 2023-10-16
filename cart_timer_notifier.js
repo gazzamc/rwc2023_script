@@ -1,5 +1,16 @@
-console.log("script loaded")
+// Get the bot token by following the guide https://core.telegram.org/bots/tutorial#obtain-your-bot-token
+const TELEGRAM_TOKEN = "enter-your-token-here";
+// Get chat_id from https://api.telegram.org/bot<api-key>/getUpdates
+const TELEGRAM_CHAT_ID = 123456; // Enter your chat id here, get it from the above url
 
+const DEBUG = false;
+const REDIRECT = true;
+const REDIRECT_URL = "https://tickets.rugbyworldcup.com/en/resale_{match}" // Set redirect if the timer in the basket expires
+
+// Do Not Modify Below This Line
+if (DEBUG) {
+    console.log("script loaded")
+}
 const cartTimer = document.getElementsByClassName("expiration-timer")
 let sentLastMessage = false;
 let timeInterval;
@@ -32,46 +43,56 @@ const debounce = (callback, wait) => {
   }
 
   const sendToTelegram = debounce(() => {
-    console.log("Send To Telegram")
+    if (DEBUG) {
+        console.log("Send To Telegram")
+    }
+
     const ticketInfo = getTicketInfo();
-    
     const message = encodeURI(`<a href="https://tickets.rugbyworldcup.com/en/cart">Tickets still in cart - ${getTime()} left to go!!</a>\nTicket(s) Info: ${ticketInfo}`);
-    const token = "<telegram-bot-token>";
-    // Get chat_id from https://api.telegram.org/bot<api-key>/getUpdates
-    const chat_id = "<telegram-chat-id>";
-    const url = `https://api.telegram.org/bot${token}/sendMessage?chat_id=${chat_id}&text=${message}&parse_mode=html`;
-    
+    const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage?chat_id=${TELEGRAM_CHAT_ID}&text=${message}&parse_mode=html`;
     const oReq = new XMLHttpRequest();
 
     try{
         oReq.open("GET", url, true);
         oReq.send();
     } catch(err){
-        console.log(err)
+        if (DEBUG) {
+            console.log(err)
+        }
+    
     }
 }, 10000);
 
 
 function checkTime(minutesLeft, secondsLeft) {
     if(minutesLeft == 15){
+        if (DEBUG) {
+            console.log(`Tickets added to cart, ${minutesLeft}:${secondsLeft} left. Hurry!!`)
+        }
+    
         sendToTelegram()
-        console.log(`Tickets added to cart, ${minutesLeft}:${secondsLeft} left. Hurry!!`)
     } 
 
     if(minutesLeft == 5){
+        if (DEBUG) {
+            console.log("5 Mins left until Tickets Expire!!")
+        }
         sendToTelegram()
-        console.log("5 Mins left until Tickets Expire!!")
     } 
     
     if(minutesLeft == 2){
+        if (DEBUG) {
+            console.log("2 Mins left until Tickets Expire!!")
+        }
         sendToTelegram()
-        console.log("2 Mins left until Tickets Expire!!")
     }
 
     if(minutesLeft == 0 && secondsLeft <= 60 && !sentLastMessage){
+        if (DEBUG) {
+            console.log("Less than a minute left until Tickets Expire!!")
+        }
         sentLastMessage = true;
         sendToTelegram()
-        console.log("Less than a minute left until Tickets Expire!!")
     }
 }
 
@@ -88,7 +109,6 @@ function getTime(){
 }
 
 function getTimerStatus(){
-    console.log("Looping")
     if(cartTimer.length){
         let time = cartTimer[0].firstElementChild.innerText
         let minutesLeft = time.split(':')[0]
@@ -104,8 +124,15 @@ function getTimerStatus(){
         }
 
     } else {
-        console.log("Times up or nothing in cart!!")
+        if (DEBUG) {
+            console.log("Times up or nothing in cart!!, redirecting to " + REDIRECT_URL)
+        }
+
         clearInterval(timeInterval);
+
+        if(REDIRECT){
+            location.href = REDIRECT_URL;
+        }
     }
 }
 
