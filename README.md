@@ -30,7 +30,7 @@ This has been tested and developed using Google Chrome, so I highly recommend th
 
 1. Create New Script
 
-2. Paste the contents of []{} into the "Javascript Code" box
+2. Paste the contents of `add_tickets.js` into the "Javascript Code" box
 
 3. Changed options to the following:
 
@@ -57,7 +57,7 @@ eg.
 
 1. Create New Script
 
-2. Paste the contents of []{} into the "Javascript Code" box
+2. Paste the contents of `cart_timer_notifier.js` into the "Javascript Code" box
 
 3. Changed options to the following:
 
